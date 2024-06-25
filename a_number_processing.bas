@@ -1,4 +1,7 @@
 Attribute VB_Name = "a_number_processing"
+
+Public a_number_2_uid As New Dictionary
+
 Sub ReplaceANumbersWithUIDs()
     Dim find_a_numbers As New RegExp
     Dim non_digits As New RegExp
@@ -6,11 +9,13 @@ Sub ReplaceANumbersWithUIDs()
     Dim cell As Range
     Dim match As Object
     Dim prevUid As Long
-    Dim a_number_2_uid As Object
     Dim uid As String
     Dim matches As Object
     Dim a_number As String
     Dim filepath As String
+    Dim serialize_a_number_to_uid_map As Boolean
+
+    serialize_a_number_to_uid_map = True
     
     ' The serializtion path of the A-number to UID map is hard coded here, but
     ' could be extracted as parameter
@@ -24,9 +29,14 @@ Sub ReplaceANumbersWithUIDs()
     non_digits.Pattern = "\D"
     non_digits.Global = True
     
+    ' Initialize prevUid for uid generation
+    prevUid = -1
+
     ' LoadCreate a dictionary to store mappings between A-numbers and UIDs
-    Set a_number_2_uid = LoadDictionaryFromFile(filepath)
-    
+    If serialize_a_number_to_uid_map Then
+        Set a_number_2_uid = LoadDictionaryFromFile(filepath)
+    End If
+
     ' Initialize prevUid for uid generation
     If a_number_2_uid.Count = 0 Then
         prevUid = -1
@@ -57,18 +67,39 @@ Sub ReplaceANumbersWithUIDs()
                     ' Replace the matched A-number in the cell with the UID
                     cell.value = Replace(cell.value, match.value, uid, 1, -1, vbTextCompare)
                 Next
+            ElseIf Not IsEmpty(cell.value) And IsNumeric(cell.value) Then
+                If 0 <= cell.value And cell.value <= 999999999 Then
+                    a_number = CLng(cell.value)
+
+                    ' Check if the A-number is already in the dictionary
+                    If Not a_number_2_uid.Exists(a_number) Then
+                        ' Generate a unique identifier (UID) for any new A-numbers
+                        prevUid = prevUid + 1
+                        a_number_2_uid.Add a_number, prevUid
+                    End If
+                    ' Format the cell as text
+                    cell.NumberFormat = "@"
+                    
+                    ' Get the UID for the A-number from the dictionary
+                    uid = "UID-" & CStr(a_number_2_uid(a_number))
+                    
+                    ' Replace the A-number in the cell with the UID
+                    cell.value = uid
+                End If
             End If
         Next cell
     Next sheet
-    
-    SaveDictionaryToFile a_number_2_uid, filepath
+
+    If serialize_a_number_to_uid_map Then
+        SaveDictionaryToFile a_number_2_uid, filepath
+    End If
 End Sub
 
 Function IsString(value As Variant) As Boolean
     IsString = VarType(value) = vbString
 End Function
 
-Function LoadDictionaryFromFile(filepath As String) As Object
+Function LoadDictionaryFromFile(filepath As String) As Dictionary
     Dim fso As New FileSystemObject
     Dim file As Object
     Dim dict As New Dictionary
@@ -105,7 +136,7 @@ Function LoadDictionaryFromFile(filepath As String) As Object
     End If
 End Function
 
-Sub SaveDictionaryToFile(dict As Object, filepath As String)
+Sub SaveDictionaryToFile(dict As Dictionary, filepath As String)
     Dim fso As New Scripting.FileSystemObject
     Dim file As Object
     Dim key As Variant
